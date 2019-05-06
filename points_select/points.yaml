@@ -1,0 +1,12 @@
+c1:
+  image: /home/andi/Sandbox/AIMAS/Scripts/points_select/images/3FPSmarks-0.png
+  points: []
+  wat_image: '#center_camera'
+c2:
+  image: /home/andi/Sandbox/AIMAS/Scripts/points_select/images/3FPSmarks-1.png
+  points:
+  - [291, 150, '#0']
+  - [166, 185, '#1']
+  - [334, 218, '#2']
+  wat_image: '#left_camera'
+matching: manual
