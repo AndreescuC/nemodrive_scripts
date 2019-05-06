@@ -1,0 +1,8 @@
+Things to try:
+    - check simple Interpolation. It seems that it doesn't even predict the points that it's
+    - camera un-distort
+    - use warpPerspective instead of perspective transform
+    - projectPoints from one camera to 3D points; ditch a dimension and use the road as a camera plane (feed to findHomography the points on the road)
+    - use fewer points (only corners)
+    - findHomography simple SHOULD work (all the points on the road are on the same plane)
+    - expand the image just to see where the rest of the points would be projected (y < 0)

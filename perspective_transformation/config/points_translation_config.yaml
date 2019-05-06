@@ -1,0 +1,12 @@
+annotation_color:
+  r: 1
+  g: 163
+  b: 104
+
+annotation_color_tolerance: 50
+
+annotated: "images/annotation/annotated.png"
+
+to_be_annotated: "images/train/3FPS_cf3e6de69c4d4e00-1.mov.png"
+
+result: "images/result_annotated_"
