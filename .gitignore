@@ -1,0 +1,14 @@
+andia
+cvat
+data_collection_full
+steering
+undistort/.idea/
+landmark_visualizer/.idea/
+landmark_visualizer/__pycache__/
+perspective_transformation/__pycache__/
+perspective_transformation/.idea/
+perspective_transformation/venv/
+points_select/.idea/
+trilateration/.idea/
+trilateration/__pycache__/
+landmark_visualizer/rvec_logs/
