@@ -1,0 +1,26 @@
+camera_extrinsics:
+    translation:
+        dept: 0
+        side: 1.6
+        height: 0
+    rotation:
+        pitch: 0
+        yaw: 0
+        roll: 0
+
+camera_intrinsics:
+    distortion: [0.036627, -0.100169, -0.000988, -0.001462, 0.000000]
+    camera_matrix: [
+    [1127.783600, 0.000000, 944.349473],
+    [0.000000, 1128.385489, 581.754914],
+    [0.000000, 0.000000, 1.000000]
+    ]
+
+
+camera_specs:
+    resolution:
+        height: 1080
+        width: 1920
+    fov:
+        vertical: 140
+        horizontal: 140

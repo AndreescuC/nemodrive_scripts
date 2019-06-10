@@ -1,6 +1,9 @@
+import os
 import cv2
 import glob
 import json
+import numpy as np
+from segmentation_projection import SegmentationHandler, read_camera_config
 
 
 FPS = 3
@@ -43,11 +46,28 @@ def get_parsed_logs(log):
     ]
 
 
+def create_segmentations_dir(seg_dir):
+    if os.path.exists(seg_dir):
+        for file in os.listdir(seg_dir):
+            file_path = os.path.join(seg_dir, file)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            except Exception as e:
+                print(e)
+    else:
+        os.mkdir(seg_dir)
+
+
 class Feed:
-    def __init__(self, log, video, segmentation_path):
+    def __init__(self, log, video, segmentation_path, segmentation_store_dir, use_old_pngs):
+        self.seg_dir = segmentation_store_dir
+
         self.logs = get_parsed_logs(log)
         self.video_frames = capture_frames(video)
         self.segmentation_frames = read_segmentations(segmentation_path)
+        self.segmentation_frames = self.transform_segmentations()
+        self.segmentation_frames = self.store_as_pngs(use_old_pngs)
 
         self.sync_logs()
 
@@ -58,7 +78,13 @@ class Feed:
         self.index += 1
         if self.index >= len(self.logs):
             self.index = 0
-        return self.segmentation_frames[self.index], self.logs[self.index]
+        return self.index == 0, self.segmentation_frames[self.index], self.logs[self.index]
+
+    def blind_fetch(self):
+        index = self.index
+        feed_done, segmentation, log = self.fetch()
+        self.index = index
+        return feed_done, segmentation, log
 
     def sync_logs(self):
         global FPS, TP_ERROR
@@ -85,3 +111,27 @@ class Feed:
 
         self.logs = logs_selection
 
+    def transform_segmentations(self):
+        assert self.segmentation_frames
+
+        intrinsics, extrinsics, fov, resolution = read_camera_config()
+        h = SegmentationHandler(intrinsics, extrinsics, fov, resolution, 60)
+
+        return [h.project_segmentation(segmentation) for segmentation in self.segmentation_frames]
+
+    def store_as_pngs(self, use_old_pngs = False):
+        if use_old_pngs:
+            return [os.path.join(self.seg_dir, "segmentation_%d.png" % i) for i in range(len(self.segmentation_frames))]
+
+        create_segmentations_dir(self.seg_dir)
+        for i, segmentation in enumerate(self.segmentation_frames):
+            b_channel, g_channel, r_channel = cv2.split(segmentation)
+
+            alpha_channel = np.array([
+                [255 if sum(element) else 0 for element in row]
+                for row in segmentation
+            ], dtype=b_channel.dtype)
+            alpha_segmentation = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
+            cv2.imwrite(os.path.join(self.seg_dir, "segmentation_%d.png" % i), alpha_segmentation)
+
+        return [os.path.join(self.seg_dir, "segmentation_%d.png" % i) for i in range(len(self.segmentation_frames))]

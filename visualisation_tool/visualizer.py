@@ -4,7 +4,8 @@ from feed import Feed
 from time import sleep
 from map_handler import ImageWgsHandler
 
-FRAME_DELAY = 0.005
+FRAME_DELAY = 0.2
+USE_OLD_PNGS = True
 
 
 class MapAdaptor:
@@ -13,8 +14,8 @@ class MapAdaptor:
 
     def convert_from_map_to_image(self, position, course):
         easting, northing = position
-        x, y = self.wgs_handler.get_image_coord([easting], [northing])
-        return x, y, course
+        x, y = self.wgs_handler.get_image_coord([easting], [northing], convert_method=2)
+        return int(x[0]), int(y[0]), course - 90
 
 
 class Game:
@@ -22,7 +23,7 @@ class Game:
         pygame.init()
         pygame.display.set_caption("Car visualisation")
         self.dimension = 800
-        self.scale = 2
+        self.scale = 20
         self.exit = False
 
     def check_event_queue(self):
@@ -31,42 +32,47 @@ class Game:
                 self.exit = True
 
     def run(self):
-        global FRAME_DELAY
+        global FRAME_DELAY, USE_OLD_PNGS
 
         feed = Feed(
             "Resources/feeds/0ba94a1ed2e0449c.json",
             "Resources/feeds/0ba94a1ed2e0449c-0.mov",
-            "Resources/feeds/0ba94a1ed2e0449c-seg"
+            "Resources/feeds/0ba94a1ed2e0449c-seg",
+            "Resources/feeds/png",
+            USE_OLD_PNGS
         )
         map_handler = MapAdaptor(
             "Resources/data/high_res_full_UPB_hybrid.jpg"
         )
 
-        segmentation, car_log = feed.fetch()
-        _, position, course = car_log
-        img_x, img_y, _ = map_handler.convert_from_map_to_image(position, course)
-        prev_pos = (img_x, img_y)
+        _, segmentation, (_, geographical_position, course) = feed.fetch()
+        img_y, img_x, angle = map_handler.convert_from_map_to_image(geographical_position, course)
+        pos = (img_x, img_y)
 
         screen = pygame_adaptor.init_screen(self.dimension)
-        map_image = pygame_adaptor.init_map(self.dimension, "Resources/data/high_res_full_UPB_hybrid.jpg", self.scale)
-        pygame_adaptor.init_car(self.dimension, "Resources/images/car.png")
+        map_image, real_size = pygame_adaptor.init_map(self.dimension, "Resources/data/high_res_full_UPB_hybrid.jpg", self.scale)
+        car_screen_position = pygame_adaptor.init_car(self.dimension, "Resources/images/car.png")
+
+        seg_sprite = pygame_adaptor.display_segmentation(car_screen_position, segmentation)
 
         while not self.exit:
-            sleep(FRAME_DELAY)
             self.check_event_queue()
+            sleep(FRAME_DELAY)
 
-            segmentation, (_, position, course) = feed.fetch()
-            img_x, img_y, angle = map_handler.convert_from_map_to_image(position, course)
-            #bp = pygame_adaptor.crop_image(screen, map_image, (1672, 6000), self.dimension, scale_factor=self.scale)
             pygame_adaptor.blit_transform(
                 screen,
                 map_image,
-                (0, 0),
-                (0, 0),
+                pos,
+                real_size,
                 self.dimension,
                 self.scale,
                 angle
             )
+
+            _, segmentation, (_, geographical_position, course) = feed.fetch()
+            img_y, img_x, angle = map_handler.convert_from_map_to_image(geographical_position, course)
+            pos = (img_x, img_y)
+            seg_sprite = pygame_adaptor.display_segmentation(car_screen_position, segmentation, seg_sprite)
 
             pygame_adaptor.update()
         pygame.quit()

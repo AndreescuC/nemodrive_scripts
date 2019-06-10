@@ -37,9 +37,10 @@ class ImageWgsHandler:
 
         reference_points = add_wgs84(reference_points)
 
-        (row_f, col_f), (easting_f, northing_f) = self.get_conversion_functions(reference_points)
+        (geo_to_row, geo_to_col), (row_f, col_f), (easting_f, northing_f) = self.get_conversion_functions(reference_points)
         self.row_f, self.col_f = row_f, col_f
         self.easting_f, self.northing_f = easting_f, northing_f
+        self.geo_to_row, self.geo_to_col = geo_to_row, geo_to_col
         self.reference_points = reference_points
 
     @staticmethod
@@ -69,7 +70,17 @@ class ImageWgsHandler:
         northing_f = linear_model.LinearRegression()
         northing_f.fit(np.column_stack([x, y]), z)
 
-        return (row_f, col_f), (easting_f, northing_f)
+        x = reference_points.latitude.values
+        y = reference_points.longitude.values
+
+        z = reference_points.pixel_row.values
+        geo_to_row = linear_model.LinearRegression()
+        geo_to_row.fit(np.column_stack([x, y]), z)
+        z = reference_points.pixel_column.values
+        geo_to_col = linear_model.LinearRegression()
+        geo_to_col.fit(np.column_stack([x, y]), z)
+
+        return (geo_to_row, geo_to_col), (row_f, col_f), (easting_f, northing_f)
 
     def get_image_coord(self, eastings, northings, convert_method=1):
 
@@ -84,9 +95,14 @@ class ImageWgsHandler:
             ref = ref_points.iloc[dist.argmin(axis=1)]
             cols = (ref.pixel_column + (eastings - ref.easting)/density).values
             rows = (ref.pixel_row - (northings - ref.northing)/density).values
-        else:
+        elif convert_method == 1:
             row_f, col_f = self.row_f, self.col_f
             rows = row_f.predict(np.column_stack([eastings, northings]))
             cols = col_f.predict(np.column_stack([eastings, northings]))
+        else:
+            geo_to_row, geo_to_col = self.geo_to_row, self.geo_to_col
+            #these are actually latitude and longitutde given
+            rows = geo_to_row.predict(np.column_stack([eastings, northings]))
+            cols = geo_to_col.predict(np.column_stack([eastings, northings]))
 
         return rows, cols
