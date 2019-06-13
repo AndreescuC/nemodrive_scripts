@@ -1,13 +1,9 @@
-import os
 import cv2
 import glob
 import json
-import numpy as np
+from feed_vs import VisualiserFeed
+from feed_pf import ParticleFilterFeed
 from segmentation_projection import SegmentationHandler, read_camera_config
-
-
-FPS = 3
-TP_ERROR = 50  # ms
 
 
 def capture_frames(video):
@@ -26,112 +22,95 @@ def read_segmentations(path):
     return [cv2.imread(file) for file in glob.glob(path + "/*.png")]
 
 
-def get_parsed_logs(log):
-    with open(log) as json_file:
-        data = json.load(json_file)
-        steering = [
-            entry['course']
-            for entry in data['locations']
-        ]
-        locations = [
-            (entry['latitude'], entry['longitude'], entry['timestamp'])
-            for entry in data['locations']
-        ]
+def project_segmentations(segmentation_frames):
+    intrinsics, extrinsics, fov, resolution = read_camera_config()
+    h = SegmentationHandler(intrinsics, extrinsics, fov, resolution, 60)
 
-    assert len(locations) == len(steering)
-    # Keeping only 3 FPS (from 30 FPS)
+    return [h.project_segmentation(segmentation) for segmentation in segmentation_frames]
+
+
+def extract_from_locations(data):
     return [
-        (location[2], (location[0], location[1]), steer)
-        for location, steer in zip(locations[::10], steering[::10])
+        {
+            'tp': entry['timestamp'],
+            'lat': entry['latitude'],
+            'long': entry['longitude'],
+            'course': entry['course']
+        }
+        for entry in data['locations']
     ]
 
 
-def create_segmentations_dir(seg_dir):
-    if os.path.exists(seg_dir):
-        for file in os.listdir(seg_dir):
-            file_path = os.path.join(seg_dir, file)
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-            except Exception as e:
-                print(e)
-    else:
-        os.mkdir(seg_dir)
+def extract_from_phone(data):
+    return [
+        {
+            'tp': x[0],
+            'raw_lat': x[1],
+            'raw_long': x[2]
+        }
+        for x in list(zip(data['phone_data']['tp'], data['phone_data']['latitude'], data['phone_data']['longitude']))
+    ]
+
+
+def extract_from_steer(data):
+    return []
+
+
+def extract_from_speed(data):
+    return []
 
 
 class Feed:
-    def __init__(self, log, video, segmentation_path, segmentation_store_dir, use_old_pngs):
-        self.seg_dir = segmentation_store_dir
+    def __init__(self, logs, videos, segmentation_paths):
+        assert len(logs) == len(videos) == len(segmentation_paths)
 
-        self.logs = get_parsed_logs(log)
-        self.video_frames = capture_frames(video)
-        self.segmentation_frames = read_segmentations(segmentation_path)
-        self.segmentation_frames = self.transform_segmentations()
-        self.segmentation_frames = self.store_as_pngs(use_old_pngs)
+        self.locations = []
+        self.phone_data = []
+        self.steer_data = []
+        self.speed_data = []
+        self.segmentation_frames = []
+        self.video_frames = []
 
-        self.sync_logs()
+        for index in range(len(logs)):
+            with open(logs[index]) as json_file:
+                data = json.load(json_file)
 
-        assert len(self.video_frames) == len(self.segmentation_frames) == len(self.logs)
-        self.index = -1
+                self.locations += extract_from_locations(data)
+                self.phone_data += extract_from_phone(data)
+                self.steer_data += extract_from_steer(data)
+                self.speed_data += extract_from_speed(data)
 
-    def fetch(self):
-        self.index += 1
-        if self.index >= len(self.logs):
-            self.index = 0
-        return self.index == 0, self.segmentation_frames[self.index], self.logs[self.index]
+            self.video_frames = capture_frames(videos[index])
 
-    def blind_fetch(self):
-        index = self.index
-        feed_done, segmentation, log = self.fetch()
-        self.index = index
-        return feed_done, segmentation, log
+            self.segmentation_frames = read_segmentations(segmentation_paths[index])
+            self.segmentation_frames = project_segmentations(self.segmentation_frames)
 
-    def sync_logs(self):
-        global FPS, TP_ERROR
+        self.visualiser_feed = VisualiserFeed(self.locations, self.segmentation_frames)
+        self.particle_filter_feed = ParticleFilterFeed(self.phone_data, self.segmentation_frames)
 
-        starting_timestamp = self.logs[0][0]
-        increment = 1000 / FPS
-        timestamps = [starting_timestamp + frame * increment for frame in range(len(self.video_frames))]
+    def fetch_vs(self, tp=None):
+        if tp is None:
+            return self.visualiser_feed.fetch()
 
-        logs_idx = frames_idx = 0
-        logs_selection = []
-        while logs_idx < len(self.logs) and frames_idx < len(self.video_frames):
-            if abs(timestamps[frames_idx] - self.logs[logs_idx][0]) < TP_ERROR:
-                logs_selection.append(self.logs[logs_idx])
-                frames_idx += 1
+        is_done, feed_frame = self.visualiser_feed.fetch()
+        while feed_frame['tp'] < tp and not is_done:
+            is_done, feed_frame = self.visualiser_feed.fetch()
 
-            logs_idx += 1
+        return is_done, feed_frame
 
-        # add last log
-        if len(logs_selection) == len(self.video_frames) - 1:
-            if logs_idx == len(self.logs):
-                logs_selection.append(self.logs[logs_idx - 1])
-            else:
-                logs_selection.append(self.logs[logs_idx])
+    def fetch_pf(self, tp=None):
+        if tp is None:
+            return self.particle_filter_feed.fetch()
 
-        self.logs = logs_selection
+        is_done, feed_frame = self.particle_filter_feed.fetch()
+        while feed_frame['tp'] < tp and not is_done:
+            is_done, feed_frame = self.particle_filter_feed.fetch()
 
-    def transform_segmentations(self):
-        assert self.segmentation_frames
+        return is_done, feed_frame
 
-        intrinsics, extrinsics, fov, resolution = read_camera_config()
-        h = SegmentationHandler(intrinsics, extrinsics, fov, resolution, 60)
+    def get_freq_vs(self):
+        return self.visualiser_feed.get_freq()
 
-        return [h.project_segmentation(segmentation) for segmentation in self.segmentation_frames]
+    def get_freq_pf(self):
+        return self.particle_filter_feed.get_freq()
 
-    def store_as_pngs(self, use_old_pngs = False):
-        if use_old_pngs:
-            return [os.path.join(self.seg_dir, "segmentation_%d.png" % i) for i in range(len(self.segmentation_frames))]
-
-        create_segmentations_dir(self.seg_dir)
-        for i, segmentation in enumerate(self.segmentation_frames):
-            b_channel, g_channel, r_channel = cv2.split(segmentation)
-
-            alpha_channel = np.array([
-                [255 if sum(element) else 0 for element in row]
-                for row in segmentation
-            ], dtype=b_channel.dtype)
-            alpha_segmentation = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
-            cv2.imwrite(os.path.join(self.seg_dir, "segmentation_%d.png" % i), alpha_segmentation)
-
-        return [os.path.join(self.seg_dir, "segmentation_%d.png" % i) for i in range(len(self.segmentation_frames))]

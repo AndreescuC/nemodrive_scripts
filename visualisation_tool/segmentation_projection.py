@@ -3,7 +3,7 @@ import cv2
 import yaml
 import numpy as np
 import matplotlib.pyplot as plt
-from math import sin, cos, tan, atan, radians, pi
+from math import tan, radians, pi
 from skimage.draw import polygon_perimeter
 
 

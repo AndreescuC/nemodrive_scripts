@@ -102,9 +102,8 @@ def blit_transform(surf, image, origin_pos, real_shape, dimension, scale_factor,
         -max_box[1] + pivot_move[1] - crop_margin
     )
 
-    print("Crop origin (%f, %f), center: (%f, %f) crop distance: (%f, %f), rotating at (%f, %f), blitting at (%f, %f)"
-          % (crop_origin[0], crop_origin[1], origin_pos[0], origin_pos[1], max_crop[0], max_crop[1], pivot[0], pivot[1], origin[0], origin[1]))
-
     rotated_image = pygame.transform.rotate(cropped_image, angle)
     surf.blit(rotated_image, origin)
+
+    return pygame.surfarray.array3d(rotated_image)
 
