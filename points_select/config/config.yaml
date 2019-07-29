@@ -1,6 +1,6 @@
 images: 2
-path: '/home/andi/Sandbox/AIMAS/Scripts/points_select/images/'
-log_file: '/home/andi/Sandbox/AIMAS/Scripts/points_select/points.yaml'
+path: '/home/andi/Sandbox/Nemodrive/nemodrive_scripts/points_select/images/'
+log_file: '/home/andi/Sandbox/Nemodrive/nemodrive_scripts/points_select/points.yaml'
 images_info:
   - tag: 'center_camera'
     file: '3FPSmarks-0.png'

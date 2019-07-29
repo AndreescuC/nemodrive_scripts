@@ -1,0 +1,1 @@
+Scripts used for extrinsic calibration. Config file proveides an image, intrinsic parameters and measured distances in real life to be projected. Twitching with the projections provides values for rotations angles.

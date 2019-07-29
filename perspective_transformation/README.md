@@ -1,0 +1,1 @@
+Scripts using for transforming central camera segmentations into lateral camera segmentations. It is based on points correspondences obtained with the 'points_selection' scripts, stored in the config dir. It usses a number of approaches (models) and stores the results in the images dir.

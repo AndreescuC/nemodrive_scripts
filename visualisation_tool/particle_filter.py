@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+from math import cos, sin
+
 
 NO_PARTICLES = 50
 LOCATION_GAUSS_SPREAD = 30
@@ -42,13 +44,21 @@ def pad_segmentation(image):
 
 def image_to_mask(img, color):
     return np.all(np.equal(img, color), axis=-1)
-    # return np.array([
-    #     [
-    #         color_mappings[sum(x)] if sum(x) in color_mappings else -1
-    #         for x in row
-    #     ]
-    #     for row in img
-    # ])
+
+
+def mark_blit_point(image, point):
+    x, y = point
+    image[x][y] = (0, 255, 0)
+    image[x][y-1] = (0, 255, 0)
+    image[x][y+1] = (0, 255, 0)
+
+    image[x-1][y] = (0, 255, 0)
+    image[x-1][y-1] = (0, 255, 0)
+    image[x-1][y+1] = (0, 255, 0)
+
+    image[x+1][y] = (0, 255, 0)
+    image[x+1][y-1] = (0, 255, 0)
+    image[x+1][y+1] = (0, 255, 0)
 
 
 def rotate(img, orientation):
@@ -57,19 +67,34 @@ def rotate(img, orientation):
     M = cv2.getRotationMatrix2D((cols / 2, rows / 2), orientation, 1)
     dst = cv2.warpAffine(img.astype(np.float64), M, (cols, rows))
 
-    return dst
+    original_blit_point = (rows - 10, cols // 2)
+    # mark_blit_point(img, original_blit_point)
+
+    # y = y*cos(a) - x*sin(a)
+    # x = y*sin(a) + x*cos(a)
+    original_blit_point = (original_blit_point[0] - rows // 2, original_blit_point[1] - cols // 2)
+
+    orientation = 360 - orientation
+    blit_point = (
+                int(original_blit_point[0] * cos(orientation) - original_blit_point[1] * sin(orientation)),
+                int(original_blit_point[0] * sin(orientation) + original_blit_point[1] * cos(orientation))
+        )
+    blit_point = (blit_point[0] + rows // 2, blit_point[1] + cols // 2)
+    # mark_blit_point(dst, blit_point)
+
+    return dst, blit_point
 
 
 def evaluate_segmentation_overlap(map_mask, segmentation, position, orientation):
     global COLOR_MAPPINGS
 
-    rotated_seg = rotate(segmentation, orientation)
+    rotated_seg, blit_point = rotate(segmentation, orientation)
     rotated_seg_mask = image_to_mask(rotated_seg, COLOR_MAPPINGS['segmentation'])
 
     h, w = rotated_seg_mask.shape
-    blit_point = (int(position[0] - h / 2), int(position[1] - w / 2))
 
-    map_mask[blit_point[0]:blit_point[0] + rotated_seg_mask.shape[0]][blit_point[1]:blit_point[1] + rotated_seg_mask.shape[1]] += rotated_seg_mask
+    map_mask[blit_point[0]:blit_point[0] + rotated_seg_mask.shape[0], blit_point[1]:blit_point[1] + rotated_seg_mask.shape[1]]\
+        += rotated_seg_mask
 
     return sum(map_mask) / (w * h)
 
@@ -85,7 +110,7 @@ class Assessor:
         global COLOR_MAPPINGS
         map_mask = image_to_mask(map_mask, COLOR_MAPPINGS['map'])
 
-        segmentation_mask = pad_segmentation(segmentation_mask)
+        # segmentation_mask = pad_segmentation(segmentation_mask)
 
         # Compute new weights
         weight_sum = 0

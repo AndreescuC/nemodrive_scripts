@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 def build_parser():
     parser = ArgumentParser()
 
-    parser.add_argument("--frame_delay", type=float, default=0.2, help="Delay between frames")
+    parser.add_argument("--frame_delay", type=float, default=0.01, help="Delay between frames")
     parser.add_argument(
         "--particle_filter",
         dest="particle_filter",
